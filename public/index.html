@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cloud To-Do</title>
+<style>
+  body { font-family: Arial, sans-serif; background: #f0f4f8; margin: 0; padding: 20px; }
+  .box { max-width: 480px; margin: 40px auto; background: #fff; padding: 24px; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,.1); }
+  h1 { margin-top: 0; color: #1a73e8; }
+  .row { display: flex; gap: 8px; margin-bottom: 16px; }
+  input[type=text], input[type=password] { flex: 1; padding: 10px; border: 1px solid #ccc; border-radius: 6px; }
+  button { padding: 10px 14px; border: 0; border-radius: 6px; background: #1a73e8; color: #fff; cursor: pointer; }
+  button.del { background: #d93025; padding: 6px 10px; }
+  ul { list-style: none; padding: 0; margin: 0; }
+  li { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid #eee; }
+  li span { flex: 1; }
+  li.done span { text-decoration: line-through; color: #999; }
+  #msg { color: #d93025; min-height: 20px; }
+</style>
+</head>
+<body>
+<div class="box">
+  <h1>Cloud To-Do</h1>
+  <div class="row">
+    <input type="password" id="pin" placeholder="Access PIN">
+    <button onclick="savePin()">Unlock</button>
+  </div>
+  <div id="msg"></div>
+  <div class="row">
+    <input type="text" id="title" placeholder="New task...">
+    <button onclick="addTodo()">Add</button>
+  </div>
+  <ul id="list"></ul>
+</div>
+<script>
+  var pin = sessionStorage.getItem('pin') || '';
+  document.getElementById('pin').value = pin;
+
+  function headers() {
+    return { 'Content-Type': 'application/json', 'X-Access-Pin': pin };
+  }
+  function savePin() {
+    pin = document.getElementById('pin').value;
+    sessionStorage.setItem('pin', pin);
+    load();
+  }
+  async function api(method, url, body) {
+    var res = await fetch(url, { method: method, headers: headers(), body: body ? JSON.stringify(body) : undefined });
+    if (res.status === 401) { document.getElementById('msg').textContent = 'Wrong or missing PIN'; throw new Error('401'); }
+    document.getElementById('msg').textContent = '';
+    return res.json();
+  }
+  async function load() {
+    try {
+      var items = await api('GET', '/api/todos');
+      var ul = document.getElementById('list');
+      ul.innerHTML = '';
+      items.forEach(function (t) {
+        var li = document.createElement('li');
+        if (t.done) li.className = 'done';
+        var cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.checked = t.done;
+        cb.onchange = function () { api('PUT', '/api/todos/' + t.id, { done: cb.checked }).then(load); };
+        var sp = document.createElement('span');
+        sp.textContent = t.title;
+        var del = document.createElement('button');
+        del.className = 'del';
+        del.textContent = 'Delete';
+        del.onclick = function () { api('DELETE', '/api/todos/' + t.id).then(load); };
+        li.append(cb, sp, del);
+        ul.appendChild(li);
+      });
+    } catch (e) { document.getElementById('list').innerHTML = ''; }
+  }
+  async function addTodo() {
+    var input = document.getElementById('title');
+    if (!input.value.trim()) return;
+    await api('POST', '/api/todos', { title: input.value });
+    input.value = '';
+    load();
+  }
+  if (pin) load();
+</script>
+</body>
+</html>
